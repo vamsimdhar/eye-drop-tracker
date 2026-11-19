@@ -170,6 +170,11 @@
                         class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold transition cursor-pointer">
                         <span>+ Add Day</span>
                     </button>
+                    <button id="btnOpenSync" type="button"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs sm:text-sm font-semibold transition cursor-pointer">
+                        <span id="syncIndicatorDot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                        <span>Sync Devices</span>
+                    </button>
                     <button id="btnPrint" type="button"
                         class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold transition cursor-pointer">
                         <span>Print</span>
@@ -221,9 +226,66 @@
                         Stopped / Not required
                     </span>
                 </div>
-                <span id="saveStatusText" class="text-slate-400 font-medium">Auto-saved locally</span>
+                <span id="saveStatusText" class="text-slate-500 font-medium">Connecting to live cloud sync...</span>
             </div>
         </main>
+    </div>
+
+    <!-- Modal 0: Multi-Device Cloud Sync & Share -->
+    <div id="syncModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-5 space-y-4">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <span class="inline-block px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 mb-1">Real-Time Cloud Sync</span>
+                    <h3 class="text-base font-bold text-slate-900">Sync Across Devices &amp; Family</h3>
+                </div>
+                <button type="button" id="btnCloseSyncModal" class="text-slate-400 hover:text-slate-700 font-bold text-lg leading-none cursor-pointer">✕</button>
+            </div>
+
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Every dose logged or schedule updated is saved automatically to the cloud. Open the <strong>Sync Link</strong> or enter the same <strong>Tracker Sync Code</strong> on another phone or computer to keep both devices synced in real time.
+            </p>
+
+            <!-- Active Sync Code & Shareable URL -->
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Your Active Tracker Sync Code</label>
+                    <div class="flex items-center gap-2">
+                        <input id="activeSyncCodeDisplay" type="text" readonly
+                            class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono font-bold text-slate-900 select-all">
+                        <button type="button" id="btnCopySyncCode"
+                            class="px-3 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold whitespace-nowrap cursor-pointer">
+                            Copy Code
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">One-Tap Sync Link (For Other Devices)</label>
+                    <div class="flex items-center gap-2">
+                        <input id="activeSyncLinkDisplay" type="text" readonly
+                            class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs text-slate-700 select-all">
+                        <button type="button" id="btnCopySyncLink"
+                            class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold whitespace-nowrap cursor-pointer">
+                            Copy Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Join / Switch to Another Device's Sync Code -->
+            <div class="pt-2 border-t border-slate-100 space-y-2">
+                <label for="joinSyncCodeInput" class="block text-xs font-bold text-slate-700">Connect to an Existing Tracker Code</label>
+                <div class="flex items-center gap-2">
+                    <input id="joinSyncCodeInput" type="text" placeholder="Paste sync code (e.g. eye-8a42f9)"
+                        class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <button type="button" id="btnJoinSyncCode"
+                        class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap cursor-pointer">
+                        Connect
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal 1: Edit / Log Cell Time -->
@@ -371,8 +433,10 @@
     <!-- Subtle Toast Notification -->
     <div id="toastNotification" class="hidden fixed bottom-4 right-4 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg no-print"></div>
 
-    <script>
-        const STORAGE_KEY = 'cataract_eye_drop_tracker_v3';
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const DROP_COLORS = {
             blue: {
@@ -451,7 +515,43 @@
             dayOverrides: {}
         };
 
-        let appState = loadState();
+        // Cloud Sync & Firebase Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'eye-drop-tracker-shared';
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let unsubscribeSnapshot = null;
+
+        /**
+         * Determine or create a room/sync code from the URL hash (?sync=code or #code)
+         */
+        function resolveSyncCode() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const fromQuery = urlParams.get('sync');
+            if (fromQuery && /^[a-zA-Z0-9_-]{3,40}$/.test(fromQuery.trim())) {
+                return fromQuery.trim();
+            }
+            const fromHash = window.location.hash.replace(/^#/, '').trim();
+            if (fromHash && /^[a-zA-Z0-9_-]{3,40}$/.test(fromHash)) {
+                return fromHash;
+            }
+            const generated = 'eye-' + Math.random().toString(36).substring(2, 8);
+            updateUrlSyncCode(generated);
+            return generated;
+        }
+
+        function updateUrlSyncCode(code) {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sync', code);
+                window.history.replaceState({}, '', url.toString());
+            } catch (e) {
+                window.location.hash = code;
+            }
+        }
+
+        let syncCode = resolveSyncCode();
+        let appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
         let activeCellCtx = null;
         let activeOverrideCtx = null;
         let draftDrops = [];
@@ -489,51 +589,164 @@
         }
 
         /**
-         * Load saved state from localStorage with fallback to DEFAULT_STATE
+         * Parse and sanitize incoming state object (from Firestore or defaults)
          */
-        function loadState() {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
-                const parsed = JSON.parse(raw);
-                const startDate = parsed.startDate || DEFAULT_STATE.startDate;
-                const drops = Array.isArray(parsed.drops) && parsed.drops.length > 0
-                    ? parsed.drops.map((d, idx) => ({
-                        id: d.id || idx + 1,
-                        name: d.name || `Eye Drop ${idx + 1}`,
-                        color: DROP_COLORS[d.color] ? d.color : Object.keys(DROP_COLORS)[idx % 4],
-                        rightRules: normalizeRules(d.rightRules, d.rightDoses, d.rightStopDate, startDate),
-                        leftRules: normalizeRules(d.leftRules, d.leftDoses, d.leftStopDate, startDate)
-                    }))
-                    : JSON.parse(JSON.stringify(DEFAULT_STATE.drops));
-
-                return {
-                    startDate,
-                    numDays: Math.max(1, Number(parsed.numDays) || 4),
-                    rightMaxCols: Math.max(1, Number(parsed.rightMaxCols) || 4),
-                    leftMaxCols: Math.max(1, Number(parsed.leftMaxCols) || 6),
-                    drops,
-                    logs: parsed.logs && typeof parsed.logs === 'object' ? parsed.logs : {},
-                    dayOverrides: parsed.dayOverrides && typeof parsed.dayOverrides === 'object' ? parsed.dayOverrides : {}
-                };
-            } catch (err) {
-                console.error('Failed to load state:', err);
+        function sanitizeState(parsed) {
+            if (!parsed || typeof parsed !== 'object') {
                 return JSON.parse(JSON.stringify(DEFAULT_STATE));
+            }
+            const startDate = parsed.startDate || DEFAULT_STATE.startDate;
+            const drops = Array.isArray(parsed.drops) && parsed.drops.length > 0
+                ? parsed.drops.map((d, idx) => ({
+                    id: d.id || idx + 1,
+                    name: d.name || `Eye Drop ${idx + 1}`,
+                    color: DROP_COLORS[d.color] ? d.color : Object.keys(DROP_COLORS)[idx % 4],
+                    rightRules: normalizeRules(d.rightRules, d.rightDoses, d.rightStopDate, startDate),
+                    leftRules: normalizeRules(d.leftRules, d.leftDoses, d.leftStopDate, startDate)
+                }))
+                : JSON.parse(JSON.stringify(DEFAULT_STATE.drops));
+
+            return {
+                startDate,
+                numDays: Math.max(1, Number(parsed.numDays) || 4),
+                rightMaxCols: Math.max(1, Number(parsed.rightMaxCols) || 4),
+                leftMaxCols: Math.max(1, Number(parsed.leftMaxCols) || 6),
+                drops,
+                logs: parsed.logs && typeof parsed.logs === 'object' ? parsed.logs : {},
+                dayOverrides: parsed.dayOverrides && typeof parsed.dayOverrides === 'object' ? parsed.dayOverrides : {}
+            };
+        }
+
+        function setSyncStatus(statusText, isConnected) {
+            const statusEl = document.getElementById('saveStatusText');
+            const dotEl = document.getElementById('syncIndicatorDot');
+            if (statusEl) statusEl.textContent = statusText;
+            if (dotEl) {
+                dotEl.className = `w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-400'}`;
             }
         }
 
         /**
-         * Persist current appState to localStorage
+         * Persist current appState to Firestore cloud document so all devices update immediately
          */
-        function saveState() {
+        async function saveState() {
+            if (!db || !currentUser) {
+                setSyncStatus('Offline mode (changes not synced)', false);
+                return;
+            }
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-                const statusEl = document.getElementById('saveStatusText');
-                if (statusEl) {
-                    statusEl.textContent = `Saved at ${getCurrentHHMM()}`;
+                setSyncStatus('Syncing to cloud...', true);
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'eye_drop_trackers', syncCode);
+                await setDoc(docRef, {
+                    ...appState,
+                    updatedAt: Date.now(),
+                    updatedBy: currentUser.uid
+                });
+                setSyncStatus(`Synced (${syncCode}) at ${getCurrentHHMM()}`, true);
+            } catch (err) {
+                console.error('Cloud sync write error:', err);
+                setSyncStatus('Sync error — check connection', false);
+                showToast('Unable to save to cloud — check internet connection');
+            }
+        }
+
+        /**
+         * Subscribe to live Firestore updates for the active syncCode
+         */
+        async function subscribeToSyncRoom(code) {
+            if (!db || !currentUser) return;
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
+            syncCode = code;
+            updateUrlSyncCode(code);
+            refreshSyncModalFields();
+
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'eye_drop_trackers', syncCode);
+
+            try {
+                // Ensure document exists on initial connection
+                const initialSnap = await getDoc(docRef);
+                if (!initialSnap.exists()) {
+                    await setDoc(docRef, {
+                        ...appState,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        updatedBy: currentUser.uid
+                    });
                 }
             } catch (err) {
-                console.error('Failed to save state:', err);
+                console.error('Initial sync check error:', err);
+            }
+
+            unsubscribeSnapshot = onSnapshot(
+                docRef,
+                (snapshot) => {
+                    if (snapshot.exists()) {
+                        appState = sanitizeState(snapshot.data());
+                        renderLegend();
+                        renderTable();
+                        setSyncStatus(`Live Sync Active (${syncCode})`, true);
+                    }
+                },
+                (error) => {
+                    console.error('Firestore listener error:', error);
+                    setSyncStatus('Live sync disconnected', false);
+                }
+            );
+        }
+
+        /**
+         * Initialize Firebase Authentication and Cloud Firestore
+         */
+        async function initCloudSync() {
+            try {
+                if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+                    setSyncStatus('Cloud sync unavailable in standalone preview', false);
+                    return;
+                }
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const cred = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = cred.user;
+                } else {
+                    const cred = await signInAnonymously(auth);
+                    currentUser = cred.user;
+                }
+
+                await subscribeToSyncRoom(syncCode);
+            } catch (err) {
+                console.error('Firebase init failed:', err);
+                setSyncStatus('Cloud sync offline', false);
+            }
+        }
+
+        function refreshSyncModalFields() {
+            const codeInp = document.getElementById('activeSyncCodeDisplay');
+            const linkInp = document.getElementById('activeSyncLinkDisplay');
+            if (codeInp) codeInp.value = syncCode;
+            if (linkInp) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('sync', syncCode);
+                linkInp.value = url.toString();
+            }
+        }
+
+        function copyInputToClipboard(inputEl, successMsg) {
+            if (!inputEl) return;
+            inputEl.select();
+            inputEl.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast(successMsg);
+            } catch (e) {
+                showToast('Select and copy the text manually');
             }
         }
 
@@ -1167,6 +1380,34 @@
         window.addEventListener('DOMContentLoaded', () => {
             renderLegend();
             renderTable();
+            refreshSyncModalFields();
+            initCloudSync();
+
+            // Sync Modal events
+            document.getElementById('btnOpenSync').addEventListener('click', () => {
+                refreshSyncModalFields();
+                document.getElementById('syncModal').classList.remove('hidden');
+            });
+            document.getElementById('btnCloseSyncModal').addEventListener('click', () => {
+                document.getElementById('syncModal').classList.add('hidden');
+            });
+            document.getElementById('btnCopySyncCode').addEventListener('click', () => {
+                copyInputToClipboard(document.getElementById('activeSyncCodeDisplay'), 'Sync Code copied!');
+            });
+            document.getElementById('btnCopySyncLink').addEventListener('click', () => {
+                copyInputToClipboard(document.getElementById('activeSyncLinkDisplay'), 'Sync Link copied! Open it on your other device.');
+            });
+            document.getElementById('btnJoinSyncCode').addEventListener('click', async () => {
+                const raw = document.getElementById('joinSyncCodeInput').value.trim();
+                if (!/^[a-zA-Z0-9_-]{3,40}$/.test(raw)) {
+                    showToast('Enter a valid sync code (letters, numbers, or hyphens)');
+                    return;
+                }
+                document.getElementById('joinSyncCodeInput').value = '';
+                document.getElementById('syncModal').classList.add('hidden');
+                showToast(`Connecting to tracker "${raw}"...`);
+                await subscribeToSyncRoom(raw);
+            });
 
             // Header action buttons
             document.getElementById('btnOpenConfig').addEventListener('click', openConfigModal);
@@ -1178,7 +1419,6 @@
             });
             document.getElementById('btnPrint').addEventListener('click', () => window.print());
             document.getElementById('btnResetDemo').addEventListener('click', () => {
-                localStorage.removeItem(STORAGE_KEY);
                 appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
                 saveState();
                 renderLegend();
