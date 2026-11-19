@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post-Cataract Surgery Eye Drop Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+
+        /* Crisp Spreadsheet Table Styling matching user's reference image */
+        .tracker-table {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: #ffffff;
+        }
+
+        .tracker-table th,
+        .tracker-table td {
+            border: 1.5px solid #0f172a;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .tracker-table thead th {
+            font-weight: 700;
+            background-color: #ffffff;
+            color: #0f172a;
+            padding: 6px 4px;
+            font-size: 0.92rem;
+        }
+
+        .date-cell {
+            font-weight: 500;
+            font-size: 0.95rem;
+            background-color: #ffffff;
+            padding: 8px 10px;
+            min-width: 96px;
+        }
+
+        .drop-num-cell {
+            font-weight: 600;
+            font-size: 0.92rem;
+            padding: 6px 10px;
+            min-width: 56px;
+        }
+
+        .time-cell {
+            height: 36px;
+            min-width: 62px;
+            padding: 4px 6px;
+            font-size: 0.92rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s ease, transform 0.08s ease;
+            user-select: none;
+        }
+
+        .time-cell:hover {
+            background-color: #eff6ff;
+        }
+
+        .time-cell:active {
+            transform: scale(0.97);
+        }
+
+        .time-cell.filled {
+            font-weight: 600;
+            color: #0f172a;
+            background-color: #f0fdf4;
+        }
+
+        .time-cell.filled:hover {
+            background-color: #dcfce7;
+        }
+
+        /* Stopped / Not Required / Unused Frequency Slots */
+        .stopped-banner-cell {
+            background: repeating-linear-gradient(
+                -45deg,
+                #f8fafc,
+                #f8fafc 6px,
+                #f1f5f9 6px,
+                #f1f5f9 12px
+            );
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+
+        .stopped-banner-cell:hover {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .na-cell {
+            background-color: #f8fafc;
+            color: #94a3b8;
+            font-size: 0.72rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .na-cell:hover {
+            background-color: #f1f5f9;
+        }
+
+        /* Print Styles for clean doctor visits */
+        @media print {
+            body {
+                background: #ffffff !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-container {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+            .tracker-table th,
+            .tracker-table td {
+                border: 1.5px solid #000000 !important;
+            }
+            .time-cell.filled {
+                background-color: #ffffff !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-3 sm:p-6">
+
+    <div class="max-w-5xl mx-auto space-y-4 print-container">
+
+        <!-- Top Control & Header Card -->
+        <header class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 no-print">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-semibold mb-1.5">
+                        <span>Post-Cataract Recovery Log</span>
+                    </div>
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                        Eye Drop Schedule &amp; Time Tracker
+                    </h1>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                        Tap any active dose slot to log current time, or tap a logged time to edit. Leave at least 5 minutes between different drops in the same eye.
+                    </p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btnOpenConfig" type="button"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition cursor-pointer">
+                        <span>Schedule &amp; Tapering Rules</span>
+                    </button>
+                    <button id="btnAddDay" type="button"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold transition cursor-pointer">
+                        <span>+ Add Day</span>
+                    </button>
+                    <button id="btnPrint" type="button"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold transition cursor-pointer">
+                        <span>Print</span>
+                    </button>
+                    <button id="btnResetDemo" type="button"
+                        class="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-semibold transition cursor-pointer">
+                        <span>Reset</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Medication Legend Bar -->
+            <div id="medicationLegend" class="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </header>
+
+        <!-- 5-Minute Spacing Warning Banner (hidden unless triggered) -->
+        <div id="spacingWarningBanner" class="hidden no-print bg-amber-50 border border-amber-300 text-amber-900 rounded-2xl p-3.5 flex items-start justify-between gap-3 shadow-sm">
+            <div class="text-xs sm:text-sm">
+                <span class="font-bold">5-Minute Spacing Reminder:</span>
+                <span id="spacingWarningText"></span>
+            </div>
+            <button id="btnCloseWarning" type="button" class="text-amber-700 hover:text-amber-950 font-bold text-sm px-2 cursor-pointer">✕</button>
+        </div>
+
+        <!-- Main Tracker Grid Card -->
+        <main class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 sm:p-5 overflow-x-auto">
+            <!-- Print-only header -->
+            <div class="hidden print:block mb-3">
+                <h2 class="text-lg font-bold text-black">Post-Cataract Surgery Eye Drop Tracker</h2>
+                <p id="printMedicationSummary" class="text-xs text-black mt-0.5"></p>
+            </div>
+
+            <table class="tracker-table" id="trackerTable">
+                <thead id="trackerHead"></thead>
+                <tbody id="trackerBody"></tbody>
+            </table>
+
+            <!-- Footer Note -->
+            <div class="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 no-print">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-emerald-50 border border-slate-400 inline-block"></span>
+                        Logged dose
+                    </span>
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-slate-100 border border-slate-400 inline-block"></span>
+                        Stopped / Not required
+                    </span>
+                </div>
+                <span id="saveStatusText" class="text-slate-400 font-medium">Auto-saved locally</span>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal 1: Edit / Log Cell Time -->
+    <div id="cellEditModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <span id="editModalBadge" class="inline-block px-2 py-0.5 rounded-md text-xs font-bold bg-sky-100 text-sky-800 mb-1">Drop 1</span>
+                    <h3 id="editModalTitle" class="text-base font-bold text-slate-900">19th Nov — Right Eye (Dose 1)</h3>
+                </div>
+                <button type="button" id="btnCloseCellModal" class="text-slate-400 hover:text-slate-700 font-bold text-lg leading-none cursor-pointer">✕</button>
+            </div>
+
+            <div class="space-y-2">
+                <label for="editTimeInput" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Time (24-Hour HH:MM)</label>
+                <div class="flex items-center gap-2">
+                    <input id="editTimeInput" type="time"
+                        class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <button type="button" id="btnSetNow"
+                        class="px-3.5 py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold whitespace-nowrap cursor-pointer">
+                        Set Now
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <button type="button" id="btnClearCell"
+                    class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer">
+                    Clear Entry
+                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btnCancelCell"
+                        class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="button" id="btnSaveCell"
+                        class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm cursor-pointer">
+                        Save Time
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Single-Day / From-Date Quick Override -->
+    <div id="dayOverrideModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
+            <div class="flex items-start justify-between gap-2">
+                <div>
+                    <span class="inline-block px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800 mb-1">Day Schedule Adjustment</span>
+                    <h3 id="overrideModalTitle" class="text-base font-bold text-slate-900">20th Nov — Drop 1 (Right Eye)</h3>
+                </div>
+                <button type="button" id="btnCloseOverrideModal" class="text-slate-400 hover:text-slate-700 font-bold text-lg leading-none cursor-pointer">✕</button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label for="overrideDosesSelect" class="block text-xs font-semibold text-slate-600 mb-1">Doses Required on This Specific Date Only</label>
+                    <select id="overrideDosesSelect" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <button type="button" id="stopFromThisDateBtn"
+                        class="w-full py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold cursor-pointer">
+                        Stop This Drop From This Date Onward
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <button type="button" id="btnClearOverride"
+                    class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">
+                    Use Default Rule
+                </button>
+                <button type="button" id="btnSaveOverride"
+                    class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm cursor-pointer">
+                    Apply for This Day
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Schedule & Tapering Rules Configuration -->
+    <div id="configModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 no-print">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900">Schedule &amp; Tapering Rules</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Configure each eye drop's frequency, stop dates, and tapering steps independently for Right &amp; Left eyes.</p>
+                </div>
+                <button type="button" id="btnCloseConfig" class="text-slate-400 hover:text-slate-700 font-bold text-lg leading-none cursor-pointer">✕</button>
+            </div>
+
+            <div class="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+                <!-- General Grid Settings -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                    <div>
+                        <label for="cfgStartDate" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Start Date</label>
+                        <input id="cfgStartDate" type="date" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900">
+                    </div>
+                    <div>
+                        <label for="cfgNumDays" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Days Shown</label>
+                        <input id="cfgNumDays" type="number" min="1" max="60" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900">
+                    </div>
+                    <div>
+                        <label for="cfgRightCols" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Right Eye Cols</label>
+                        <input id="cfgRightCols" type="number" min="1" max="10" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900">
+                    </div>
+                    <div>
+                        <label for="cfgLeftCols" class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Left Eye Cols</label>
+                        <input id="cfgLeftCols" type="number" min="1" max="10" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900">
+                    </div>
+                </div>
+
+                <!-- Per-Medication Frequency & Tapering Rules -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-800">Medications &amp; Tapering Schedule</h3>
+                        <button type="button" id="btnAddDropType"
+                            class="px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold cursor-pointer">
+                            + Add Eye Drop
+                        </button>
+                    </div>
+                    <div id="cfgDropsList" class="space-y-3">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/70 rounded-b-2xl">
+                <button type="button" id="btnCancelConfig"
+                    class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs sm:text-sm font-bold cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="btnSaveConfig"
+                    class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-bold shadow-sm cursor-pointer">
+                    Save Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subtle Toast Notification -->
+    <div id="toastNotification" class="hidden fixed bottom-4 right-4 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg no-print"></div>
+
+    <script>
+        const STORAGE_KEY = 'cataract_eye_drop_tracker_v3';
+
+        const DROP_COLORS = {
+            blue: {
+                badgeBg: 'bg-sky-100',
+                badgeText: 'text-sky-800',
+                border: 'border-sky-200',
+                dot: 'bg-sky-600'
+            },
+            emerald: {
+                badgeBg: 'bg-emerald-100',
+                badgeText: 'text-emerald-800',
+                border: 'border-emerald-200',
+                dot: 'bg-emerald-600'
+            },
+            purple: {
+                badgeBg: 'bg-purple-100',
+                badgeText: 'text-purple-800',
+                border: 'border-purple-200',
+                dot: 'bg-purple-600'
+            },
+            amber: {
+                badgeBg: 'bg-amber-100',
+                badgeText: 'text-amber-800',
+                border: 'border-amber-200',
+                dot: 'bg-amber-600'
+            }
+        };
+
+        const DEFAULT_STATE = {
+            startDate: '2026-11-19',
+            numDays: 4,
+            rightMaxCols: 4,
+            leftMaxCols: 6,
+            drops: [
+                {
+                    id: 1,
+                    name: 'Maxim (Antibiotic)',
+                    color: 'blue',
+                    rightRules: [
+                        { fromDate: '2026-11-19', doses: 4, stopDate: '2026-11-20' }
+                    ],
+                    leftRules: [
+                        { fromDate: '2026-11-19', doses: 4, stopDate: '' }
+                    ]
+                },
+                {
+                    id: 2,
+                    name: 'Eye Drop 2 (Anti-inflammatory)',
+                    color: 'emerald',
+                    rightRules: [
+                        { fromDate: '2026-11-19', doses: 4, stopDate: '' }
+                    ],
+                    leftRules: [
+                        { fromDate: '2026-11-19', doses: 6, stopDate: '' }
+                    ]
+                },
+                {
+                    id: 3,
+                    name: 'Eye Drop 3 (Lubricant)',
+                    color: 'purple',
+                    rightRules: [
+                        { fromDate: '2026-11-19', doses: 4, stopDate: '' }
+                    ],
+                    leftRules: [
+                        { fromDate: '2026-11-19', doses: 6, stopDate: '' }
+                    ]
+                }
+            ],
+            // Key format: "YYYY-MM-DD|dropId|eyeCode|doseNum" -> "HH:MM"
+            logs: {
+                '2026-11-19|1|R|1': '07:00',
+                '2026-11-19|2|R|1': '08:05',
+                '2026-11-19|3|R|1': '09:15'
+            },
+            // Key format: "YYYY-MM-DD|dropId|eyeCode" -> number of doses for that single day
+            dayOverrides: {}
+        };
+
+        let appState = loadState();
+        let activeCellCtx = null;
+        let activeOverrideCtx = null;
+        let draftDrops = [];
+
+        /**
+         * Normalize a medication's date-based frequency rules array
+         */
+        function normalizeRules(rules, fallbackDoses, legacyStopDate, startDate) {
+            if (Array.isArray(rules) && rules.length > 0) {
+                const sorted = rules
+                    .filter(r => r && r.fromDate)
+                    .map(r => ({
+                        fromDate: r.fromDate,
+                        doses: Math.max(0, Number(r.doses) || 0),
+                        stopDate: r.stopDate || ''
+                    }))
+                    .sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+
+                const cleaned = [];
+                for (let i = 0; i < sorted.length; i++) {
+                    const curr = sorted[i];
+                    if (curr.doses === 0 && cleaned.length > 0 && !cleaned[cleaned.length - 1].stopDate) {
+                        cleaned[cleaned.length - 1].stopDate = curr.fromDate;
+                    } else {
+                        cleaned.push(curr);
+                    }
+                }
+                if (cleaned.length > 0) return cleaned;
+            }
+            return [{
+                fromDate: startDate || '2026-11-19',
+                doses: Number(fallbackDoses) || 4,
+                stopDate: legacyStopDate || ''
+            }];
+        }
+
+        /**
+         * Load saved state from localStorage with fallback to DEFAULT_STATE
+         */
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
+                const parsed = JSON.parse(raw);
+                const startDate = parsed.startDate || DEFAULT_STATE.startDate;
+                const drops = Array.isArray(parsed.drops) && parsed.drops.length > 0
+                    ? parsed.drops.map((d, idx) => ({
+                        id: d.id || idx + 1,
+                        name: d.name || `Eye Drop ${idx + 1}`,
+                        color: DROP_COLORS[d.color] ? d.color : Object.keys(DROP_COLORS)[idx % 4],
+                        rightRules: normalizeRules(d.rightRules, d.rightDoses, d.rightStopDate, startDate),
+                        leftRules: normalizeRules(d.leftRules, d.leftDoses, d.leftStopDate, startDate)
+                    }))
+                    : JSON.parse(JSON.stringify(DEFAULT_STATE.drops));
+
+                return {
+                    startDate,
+                    numDays: Math.max(1, Number(parsed.numDays) || 4),
+                    rightMaxCols: Math.max(1, Number(parsed.rightMaxCols) || 4),
+                    leftMaxCols: Math.max(1, Number(parsed.leftMaxCols) || 6),
+                    drops,
+                    logs: parsed.logs && typeof parsed.logs === 'object' ? parsed.logs : {},
+                    dayOverrides: parsed.dayOverrides && typeof parsed.dayOverrides === 'object' ? parsed.dayOverrides : {}
+                };
+            } catch (err) {
+                console.error('Failed to load state:', err);
+                return JSON.parse(JSON.stringify(DEFAULT_STATE));
+            }
+        }
+
+        /**
+         * Persist current appState to localStorage
+         */
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+                const statusEl = document.getElementById('saveStatusText');
+                if (statusEl) {
+                    statusEl.textContent = `Saved at ${getCurrentHHMM()}`;
+                }
+            } catch (err) {
+                console.error('Failed to save state:', err);
+            }
+        }
+
+        /**
+         * Format ISO date "2026-11-19" -> "19th Nov"
+         */
+        function formatOrdinalDate(isoStr) {
+            if (!isoStr) return '';
+            const parts = isoStr.split('-').map(Number);
+            if (parts.length !== 3) return isoStr;
+            const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+            const day = dateObj.getDate();
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = monthNames[dateObj.getMonth()] || '';
+
+            let suffix = 'th';
+            if (day % 10 === 1 && day !== 11) suffix = 'st';
+            else if (day % 10 === 2 && day !== 12) suffix = 'nd';
+            else if (day % 10 === 3 && day !== 13) suffix = 'rd';
+
+            return `${day}${suffix} ${month}`;
+        }
+
+        /**
+         * Generate consecutive ISO YYYY-MM-DD date strings starting from startIso
+         */
+        function generateDateList(startIso, count) {
+            const parts = (startIso || '2026-11-19').split('-').map(Number);
+            const base = new Date(parts[0], parts[1] - 1, parts[2]);
+            const list = [];
+            for (let i = 0; i < count; i++) {
+                const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                list.push(`${yyyy}-${mm}-${dd}`);
+            }
+            return list;
+        }
+
+        /**
+         * Current local time as HH:MM (24-hour)
+         */
+        function getCurrentHHMM() {
+            const now = new Date();
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+        }
+
+        /**
+         * Show brief toast feedback message
+         */
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.classList.remove('hidden');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2400);
+        }
+
+        /**
+         * Determine the effective required dose count & reason for a given Date, Drop, and Eye ('R'|'L')
+         */
+        function getEffectiveSchedule(dateIso, drop, eyeCode) {
+            const overrideKey = `${dateIso}|${drop.id}|${eyeCode}`;
+            if (Object.prototype.hasOwnProperty.call(appState.dayOverrides, overrideKey)) {
+                return {
+                    requiredDoses: Number(appState.dayOverrides[overrideKey]) || 0,
+                    reason: 'override',
+                    stopDate: dateIso
+                };
+            }
+
+            const rules = (eyeCode === 'R' ? drop.rightRules : drop.leftRules) || [];
+            const sorted = [...rules].sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+
+            let activeRule = sorted[0] || { fromDate: appState.startDate, doses: 0, stopDate: '' };
+            for (const rule of sorted) {
+                if (rule.fromDate <= dateIso) {
+                    activeRule = rule;
+                } else {
+                    break;
+                }
+            }
+
+            if (activeRule.stopDate && dateIso >= activeRule.stopDate) {
+                return {
+                    requiredDoses: 0,
+                    reason: 'stopped_date',
+                    stopDate: activeRule.stopDate
+                };
+            }
+
+            const doses = Math.max(0, Number(activeRule.doses) || 0);
+            if (doses === 0 && activeRule.fromDate > appState.startDate) {
+                return {
+                    requiredDoses: 0,
+                    reason: 'stopped_date',
+                    stopDate: activeRule.fromDate
+                };
+            }
+
+            return {
+                requiredDoses: doses,
+                reason: 'rule',
+                stopDate: activeRule.stopDate || activeRule.fromDate
+            };
+        }
+
+        /**
+         * Format a compact summary of a drop's rule timeline for the top legend badge
+         */
+        function formatRulesSummary(rules) {
+            if (!rules || rules.length === 0) return '0x';
+            const sorted = [...rules].sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+            const parts = sorted.map((r, idx) => {
+                const label = r.doses === 0 ? 'Stop' : `${r.doses}x`;
+                const stepStr = idx === 0 ? label : `${label} (${formatOrdinalDate(r.fromDate)})`;
+                const nextRule = sorted[idx + 1];
+                if (r.stopDate && (!nextRule || nextRule.fromDate !== r.stopDate)) {
+                    return `${stepStr} → Stop (${formatOrdinalDate(r.stopDate)})`;
+                }
+                return stepStr;
+            });
+            return parts.join(' → ');
+        }
+
+        /**
+         * Check if two different drops in the same eye on the same date were logged < 5 minutes apart
+         */
+        function checkDropSpacingWarning(dateIso, dropId, eyeCode, timeStr) {
+            if (!timeStr || !timeStr.includes(':')) return;
+            const [h1, m1] = timeStr.split(':').map(Number);
+            const mins1 = h1 * 60 + m1;
+
+            for (const otherDrop of appState.drops) {
+                if (otherDrop.id === dropId) continue;
+                const maxCols = eyeCode === 'R' ? appState.rightMaxCols : appState.leftMaxCols;
+                for (let doseNum = 1; doseNum <= maxCols; doseNum++) {
+                    const otherKey = `${dateIso}|${otherDrop.id}|${eyeCode}|${doseNum}`;
+                    const otherTime = appState.logs[otherKey];
+                    if (otherTime && otherTime.includes(':')) {
+                        const [h2, m2] = otherTime.split(':').map(Number);
+                        const mins2 = h2 * 60 + m2;
+                        const diff = Math.abs(mins1 - mins2);
+                        if (diff < 5) {
+                            const eyeLabel = eyeCode === 'R' ? 'Right Eye' : 'Left Eye';
+                            const banner = document.getElementById('spacingWarningBanner');
+                            const textEl = document.getElementById('spacingWarningText');
+                            if (banner && textEl) {
+                                textEl.textContent = `Drop ${dropId} (${timeStr}) and ${otherDrop.name} (${otherTime}) in the ${eyeLabel} on ${formatOrdinalDate(dateIso)} are only ${diff} min apart. Doctors recommend waiting at least 5 minutes.`;
+                                banner.classList.remove('hidden');
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Render top Medication Legend cards
+         */
+        function renderLegend() {
+            const container = document.getElementById('medicationLegend');
+            if (!container) return;
+            container.innerHTML = '';
+
+            appState.drops.forEach((drop, idx) => {
+                const palette = DROP_COLORS[drop.color] || DROP_COLORS.blue;
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-xl border ${palette.border} bg-slate-50/70 hover:bg-white transition cursor-pointer`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold ${palette.badgeBg} ${palette.badgeText}">
+                            <span class="w-2 h-2 rounded-full ${palette.dot}"></span>
+                            Drop ${idx + 1}: ${drop.name}
+                        </span>
+                        <span class="text-[11px] text-slate-400 font-semibold">Edit</span>
+                    </div>
+                    <div class="text-[11px] text-slate-600 space-y-0.5">
+                        <div><span class="font-bold text-slate-800">Right Eye:</span> ${formatRulesSummary(drop.rightRules)}</div>
+                        <div><span class="font-bold text-slate-800">Left Eye:</span> ${formatRulesSummary(drop.leftRules)}</div>
+                    </div>
+                `;
+                card.addEventListener('click', openConfigModal);
+                container.appendChild(card);
+            });
+
+            const printSummary = document.getElementById('printMedicationSummary');
+            if (printSummary) {
+                printSummary.textContent = appState.drops
+                    .map((d, i) => `Drop ${i + 1}: ${d.name} [R: ${formatRulesSummary(d.rightRules)} | L: ${formatRulesSummary(d.leftRules)}]`)
+                    .join('   •   ');
+            }
+        }
+
+        /**
+         * Render the main spreadsheet-style Eye Drop Tracker table
+         */
+        function renderTable() {
+            const thead = document.getElementById('trackerHead');
+            const tbody = document.getElementById('trackerBody');
+            if (!thead || !tbody) return;
+
+            const rCols = appState.rightMaxCols;
+            const lCols = appState.leftMaxCols;
+
+            // Header rows matching the attached image format
+            let headHtml = `
+                <tr>
+                    <th rowspan="2" class="w-28">Date</th>
+                    <th rowspan="2" class="w-20 leading-tight">Eye<br>Drop</th>
+                    <th colspan="${rCols}">Right Eye</th>
+                    <th colspan="${lCols}">Left Eye</th>
+                </tr>
+                <tr>
+            `;
+            for (let i = 1; i <= rCols; i++) {
+                headHtml += `<th>${i}</th>`;
+            }
+            for (let i = 1; i <= lCols; i++) {
+                headHtml += `<th>${i}</th>`;
+            }
+            headHtml += `</tr>`;
+            thead.innerHTML = headHtml;
+
+            // Body rows grouped by Date -> Eye Drops 1..N
+            tbody.innerHTML = '';
+            const dates = generateDateList(appState.startDate, appState.numDays);
+            const dropCount = appState.drops.length;
+
+            dates.forEach(dateIso => {
+                const formattedDate = formatOrdinalDate(dateIso);
+
+                appState.drops.forEach((drop, dropIndex) => {
+                    const tr = document.createElement('tr');
+
+                    // Merged Date cell on the first drop row of each date
+                    if (dropIndex === 0) {
+                        const dateTd = document.createElement('td');
+                        dateTd.rowSpan = dropCount;
+                        dateTd.className = 'date-cell';
+                        dateTd.textContent = formattedDate;
+                        tr.appendChild(dateTd);
+                    }
+
+                    // Eye Drop Number cell (1, 2, 3...)
+                    const dropTd = document.createElement('td');
+                    dropTd.className = 'drop-num-cell';
+                    dropTd.textContent = String(dropIndex + 1);
+                    dropTd.title = drop.name;
+                    tr.appendChild(dropTd);
+
+                    // Helper to append Right Eye or Left Eye cells
+                    const appendEyeCells = (eyeCode, maxCols) => {
+                        const sched = getEffectiveSchedule(dateIso, drop, eyeCode);
+                        const req = sched.requiredDoses;
+
+                        // If stopped for this eye on this date and no logs exist, show clean merged Stopped banner
+                        const hasAnyLog = Array.from({ length: maxCols }, (_, idx) => appState.logs[`${dateIso}|${drop.id}|${eyeCode}|${idx + 1}`]).some(Boolean);
+                        if (req === 0 && !hasAnyLog) {
+                            const stopTd = document.createElement('td');
+                            stopTd.colSpan = maxCols;
+                            stopTd.className = 'stopped-banner-cell';
+                            stopTd.textContent = sched.reason === 'stopped_date'
+                                ? `Stopped / Not Req. (from ${formatOrdinalDate(sched.stopDate)})`
+                                : 'Not Required (0x)';
+                            stopTd.title = 'Click to adjust schedule for this day';
+                            stopTd.addEventListener('click', () => openDayOverrideModal(dateIso, formattedDate, drop, eyeCode));
+                            tr.appendChild(stopTd);
+                            return;
+                        }
+
+                        for (let doseNum = 1; doseNum <= maxCols; doseNum++) {
+                            const cellKey = `${dateIso}|${drop.id}|${eyeCode}|${doseNum}`;
+                            const loggedTime = appState.logs[cellKey] || '';
+                            const td = document.createElement('td');
+
+                            if (doseNum <= req || loggedTime) {
+                                td.className = `time-cell ${loggedTime ? 'filled' : ''}`;
+                                td.textContent = loggedTime;
+                                td.title = loggedTime
+                                    ? `Logged at ${loggedTime} — Click to edit or clear`
+                                    : `Click to log current time for ${drop.name} (${eyeCode === 'R' ? 'Right' : 'Left'} Eye, Dose ${doseNum})`;
+
+                                td.addEventListener('click', () => {
+                                    if (!appState.logs[cellKey]) {
+                                        const nowStr = getCurrentHHMM();
+                                        appState.logs[cellKey] = nowStr;
+                                        saveState();
+                                        renderTable();
+                                        checkDropSpacingWarning(dateIso, drop.id, eyeCode, nowStr);
+                                        showToast(`Logged ${nowStr} for ${drop.name} (${eyeCode === 'R' ? 'Right' : 'Left'} Eye)`);
+                                    } else {
+                                        openCellEditModal(dateIso, formattedDate, drop, eyeCode, doseNum);
+                                    }
+                                });
+                            } else {
+                                td.className = 'na-cell';
+                                td.textContent = '—';
+                                td.title = `Only ${req} dose(s) scheduled — Click to adjust this day's dose count`;
+                                td.addEventListener('click', () => openDayOverrideModal(dateIso, formattedDate, drop, eyeCode));
+                            }
+
+                            tr.appendChild(td);
+                        }
+                    };
+
+                    appendEyeCells('R', rCols);
+                    appendEyeCells('L', lCols);
+
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        /**
+         * Open modal to manually edit or clear an existing logged time
+         */
+        function openCellEditModal(dateIso, formattedDate, drop, eyeCode, doseNum) {
+            const cellKey = `${dateIso}|${drop.id}|${eyeCode}|${doseNum}`;
+            activeCellCtx = { dateIso, formattedDate, drop, eyeCode, doseNum, cellKey };
+
+            document.getElementById('editModalBadge').textContent = drop.name;
+            document.getElementById('editModalTitle').textContent =
+                `${formattedDate} — ${eyeCode === 'R' ? 'Right Eye' : 'Left Eye'} (Dose ${doseNum})`;
+            document.getElementById('editTimeInput').value = appState.logs[cellKey] || getCurrentHHMM();
+            document.getElementById('cellEditModal').classList.remove('hidden');
+        }
+
+        function closeCellEditModal() {
+            document.getElementById('cellEditModal').classList.add('hidden');
+            activeCellCtx = null;
+        }
+
+        /**
+         * Open modal for single-day or from-date dose override
+         */
+        function openDayOverrideModal(dateIso, formattedDate, drop, eyeCode) {
+            const maxCols = eyeCode === 'R' ? appState.rightMaxCols : appState.leftMaxCols;
+            const sched = getEffectiveSchedule(dateIso, drop, eyeCode);
+            activeOverrideCtx = { dateIso, formattedDate, dropId: drop.id, eyeCode };
+
+            document.getElementById('overrideModalTitle').textContent =
+                `${formattedDate} — ${drop.name} (${eyeCode === 'R' ? 'Right Eye' : 'Left Eye'})`;
+
+            const sel = document.getElementById('overrideDosesSelect');
+            sel.innerHTML = '';
+            for (let n = 0; n <= maxCols; n++) {
+                const opt = document.createElement('option');
+                opt.value = String(n);
+                opt.textContent = n === 0 ? '0 doses (Not required today)' : `${n} dose${n > 1 ? 's' : ''} today`;
+                if (n === sched.requiredDoses) opt.selected = true;
+                sel.appendChild(opt);
+            }
+
+            document.getElementById('dayOverrideModal').classList.remove('hidden');
+        }
+
+        function closeDayOverrideModal() {
+            document.getElementById('dayOverrideModal').classList.add('hidden');
+            activeOverrideCtx = null;
+        }
+
+        /**
+         * Sync current input values from Schedule & Tapering Rules modal DOM into draftDrops
+         */
+        function syncDraftDropsFromDOM() {
+            document.querySelectorAll('[data-drop-name]').forEach(inp => {
+                const idx = Number(inp.getAttribute('data-drop-name'));
+                if (draftDrops[idx]) {
+                    draftDrops[idx].name = inp.value.trim() || `Eye Drop ${idx + 1}`;
+                }
+            });
+
+            document.querySelectorAll('[data-rule-doses]').forEach(sel => {
+                const dropIdx = Number(sel.getAttribute('data-drop-idx'));
+                const eye = sel.getAttribute('data-eye');
+                const ruleIdx = Number(sel.getAttribute('data-rule-idx'));
+                const rules = eye === 'R' ? draftDrops[dropIdx]?.rightRules : draftDrops[dropIdx]?.leftRules;
+                if (rules && rules[ruleIdx]) {
+                    rules[ruleIdx].doses = Number(sel.value);
+                }
+            });
+
+            document.querySelectorAll('[data-rule-stop]').forEach(sel => {
+                const dropIdx = Number(sel.getAttribute('data-drop-idx'));
+                const eye = sel.getAttribute('data-eye');
+                const ruleIdx = Number(sel.getAttribute('data-rule-idx'));
+                const rules = eye === 'R' ? draftDrops[dropIdx]?.rightRules : draftDrops[dropIdx]?.leftRules;
+                if (rules && rules[ruleIdx]) {
+                    rules[ruleIdx].stopDate = sel.value;
+                }
+            });
+            document.querySelectorAll('[data-rule-stop]').forEach(inp => {
+                const dropIdx = Number(inp.getAttribute('data-drop-idx'));
+                const eye = inp.getAttribute('data-eye');
+                const ruleIdx = Number(inp.getAttribute('data-rule-idx'));
+                const rules = eye === 'R' ? draftDrops[dropIdx]?.rightRules : draftDrops[dropIdx]?.leftRules;
+                if (rules && rules[ruleIdx]) {
+                    rules[ruleIdx].stopDate = inp.value;
+                }
+            });
+        }
+
+        /**
+         * Render medication rule cards inside Schedule & Tapering Rules modal
+         */
+        function renderConfigDropsList() {
+            const list = document.getElementById('cfgDropsList');
+            if (!list) return;
+            list.innerHTML = '';
+
+            const startVal = document.getElementById('cfgStartDate').value || appState.startDate;
+            const numDaysVal = Math.max(Number(document.getElementById('cfgNumDays').value) || appState.numDays, 14);
+            const rMax = Math.max(1, Number(document.getElementById('cfgRightCols').value) || appState.rightMaxCols);
+            const lMax = Math.max(1, Number(document.getElementById('cfgLeftCols').value) || appState.leftMaxCols);
+            const dates = generateDateList(startVal, numDaysVal);
+
+            const renderEyeRuleRows = (dropIdx, eyeCode, rules, maxDoses, accent) => {
+                const isSky = accent === 'sky';
+                const borderCol = isSky ? 'border-sky-300' : 'border-amber-300';
+                const btnCol = isSky
+                    ? 'bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-300'
+                    : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300';
+
+                let rowsHtml = `<div class="space-y-2">`;
+                rules.forEach((rule, rIdx) => {
+                    const isFirst = rIdx === 0;
+                    const currentStopDate = rule.stopDate || '';
+
+                    let doseOptions = '';
+                    for (let n = 0; n <= maxDoses; n++) {
+                        const label = n === 0 ? '0x (Stopped)' : `${n}x / day`;
+                        doseOptions += `<option value="${n}" ${Number(rule.doses) === n ? 'selected' : ''}>${label}</option>`;
+                    }
+
+                    const stepSubtitle = `Starts ${formatOrdinalDate(rule.fromDate)}`;
+
+                    rowsHtml += `
+                        <div class="space-y-1 ${!isFirst ? 'pt-1.5 border-t border-slate-200/70' : ''}">
+                            <div class="flex items-center justify-between text-[10px] font-semibold text-slate-600 px-0.5">
+                                <span>${stepSubtitle}</span>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" data-stop-today data-drop-idx="${dropIdx}" data-eye="${eyeCode}" data-rule-idx="${rIdx}"
+                                        class="text-sky-700 hover:text-sky-900 font-bold cursor-pointer">
+                                        Stop Today
+                                    </button>
+                                    ${currentStopDate ? `
+                                        <button type="button" data-clear-stop data-drop-idx="${dropIdx}" data-eye="${eyeCode}" data-rule-idx="${rIdx}"
+                                            class="text-slate-500 hover:text-slate-800 font-bold cursor-pointer">
+                                            Clear
+                                        </button>
+                                    ` : ''}
+                                    ${!isFirst ? `
+                                        <button type="button" data-del-rule data-drop-idx="${dropIdx}" data-eye="${eyeCode}" data-rule-idx="${rIdx}"
+                                            title="Remove this frequency step"
+                                            class="text-rose-600 hover:text-rose-700 font-bold inline-flex items-center gap-0.5 cursor-pointer">
+                                            <span>Remove</span>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <select data-rule-doses data-drop-idx="${dropIdx}" data-eye="${eyeCode}" data-rule-idx="${rIdx}"
+                                    class="w-[42%] px-2 py-1.5 rounded-lg border ${borderCol} bg-white text-xs font-bold text-slate-900">
+                                    ${doseOptions}
+                                </select>
+                                <input type="date" data-rule-stop data-drop-idx="${dropIdx}" data-eye="${eyeCode}" data-rule-idx="${rIdx}"
+                                    min="${rule.fromDate}" value="${currentStopDate}"
+                                    title="Select Stop Date (leave empty for no stop date)"
+                                    class="w-[58%] px-2 py-1 rounded-lg border ${borderCol} bg-white text-xs font-bold text-slate-900">
+                            </div>
+                        </div>
+                    `;
+                });
+
+                rowsHtml += `
+                    <button type="button" data-add-rule data-drop-idx="${dropIdx}" data-eye="${eyeCode}"
+                        class="w-full py-1.5 px-2.5 rounded-lg border ${btnCol} text-xs font-bold inline-flex items-center justify-center gap-1 transition cursor-pointer">
+                        <span>+ Add Frequency Change</span>
+                    </button>
+                </div>`;
+                return rowsHtml;
+            };
+
+            draftDrops.forEach((drop, dropIdx) => {
+                const palette = DROP_COLORS[drop.color] || DROP_COLORS.blue;
+                const card = document.createElement('div');
+                card.className = 'p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3';
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="px-2 py-0.5 rounded-md text-xs font-bold ${palette.badgeBg} ${palette.badgeText} whitespace-nowrap">
+                                Drop ${dropIdx + 1}
+                            </span>
+                            <input type="text" data-drop-name="${dropIdx}" value="${drop.name.replace(/"/g, '&quot;')}"
+                                placeholder="Medication name"
+                                class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs sm:text-sm font-bold text-slate-900">
+                        </div>
+                        ${draftDrops.length > 1 ? `
+                            <button type="button" data-del-drop="${dropIdx}"
+                                class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold cursor-pointer">
+                                Delete
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="p-2.5 rounded-xl bg-sky-50/70 border border-sky-200/80 space-y-1.5">
+                            <div class="text-[11px] font-bold text-sky-900 uppercase tracking-wide">Right Eye Schedule</div>
+                            ${renderEyeRuleRows(dropIdx, 'R', drop.rightRules, rMax, 'sky')}
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-1.5">
+                            <div class="text-[11px] font-bold text-amber-900 uppercase tracking-wide">Left Eye Schedule</div>
+                            ${renderEyeRuleRows(dropIdx, 'L', drop.leftRules, lMax, 'amber')}
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+
+            // Save Stop Date calendar changes without auto-creating a new row
+            list.querySelectorAll('[data-rule-stop]').forEach(inp => {
+                inp.addEventListener('change', () => {
+                    syncDraftDropsFromDOM();
+                    renderConfigDropsList();
+                });
+            });
+
+            // Quick "Stop Today" button sets the calendar date to today
+            list.querySelectorAll('[data-stop-today]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    syncDraftDropsFromDOM();
+                    const dropIdx = Number(btn.getAttribute('data-drop-idx'));
+                    const eye = btn.getAttribute('data-eye');
+                    const ruleIdx = Number(btn.getAttribute('data-rule-idx'));
+                    const rules = eye === 'R' ? draftDrops[dropIdx].rightRules : draftDrops[dropIdx].leftRules;
+                    if (rules && rules[ruleIdx]) {
+                        const now = new Date();
+                        const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        rules[ruleIdx].stopDate = todayIso < rules[ruleIdx].fromDate ? rules[ruleIdx].fromDate : todayIso;
+                        renderConfigDropsList();
+                    }
+                });
+            });
+
+            // Quick "Clear" button clears the calendar stop date
+            list.querySelectorAll('[data-clear-stop]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    syncDraftDropsFromDOM();
+                    const dropIdx = Number(btn.getAttribute('data-drop-idx'));
+                    const eye = btn.getAttribute('data-eye');
+                    const ruleIdx = Number(btn.getAttribute('data-rule-idx'));
+                    const rules = eye === 'R' ? draftDrops[dropIdx].rightRules : draftDrops[dropIdx].leftRules;
+                    if (rules && rules[ruleIdx]) {
+                        rules[ruleIdx].stopDate = '';
+                        renderConfigDropsList();
+                    }
+                });
+            });
+
+            // Wire "+ Add Frequency Change" buttons per medication & eye
+            list.querySelectorAll('[data-add-rule]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    syncDraftDropsFromDOM();
+                    const dropIdx = Number(btn.getAttribute('data-drop-idx'));
+                    const eye = btn.getAttribute('data-eye');
+                    const rules = eye === 'R' ? draftDrops[dropIdx].rightRules : draftDrops[dropIdx].leftRules;
+
+                    const lastRule = rules[rules.length - 1];
+                    const suggestedDoses = lastRule.doses > 2 ? 2 : (lastRule.doses === 0 ? 2 : Math.max(0, lastRule.doses - 1));
+                    const nextDateIdx = Math.min(dates.length - 1, Math.max(1, dates.indexOf(lastRule.fromDate) + 1));
+                    const nextFromDate = lastRule.stopDate || dates[nextDateIdx] || dates[1] || startVal;
+
+                    rules.push({ fromDate: nextFromDate, doses: suggestedDoses, stopDate: '' });
+                    renderConfigDropsList();
+                });
+            });
+
+            // Wire Remove frequency step buttons
+            list.querySelectorAll('[data-del-rule]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    syncDraftDropsFromDOM();
+                    const dropIdx = Number(btn.getAttribute('data-drop-idx'));
+                    const eye = btn.getAttribute('data-eye');
+                    const ruleIdx = Number(btn.getAttribute('data-rule-idx'));
+                    const rules = eye === 'R' ? draftDrops[dropIdx].rightRules : draftDrops[dropIdx].leftRules;
+                    if (rules && rules.length > 1) {
+                        rules.splice(ruleIdx, 1);
+                        renderConfigDropsList();
+                    }
+                });
+            });
+
+            // Wire Delete drop buttons
+            list.querySelectorAll('[data-del-drop]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    syncDraftDropsFromDOM();
+                    const dropIdx = Number(btn.getAttribute('data-del-drop'));
+                    if (draftDrops.length > 1) {
+                        draftDrops.splice(dropIdx, 1);
+                        renderConfigDropsList();
+                    }
+                });
+            });
+        }
+
+        function openConfigModal() {
+            document.getElementById('cfgStartDate').value = appState.startDate;
+            document.getElementById('cfgNumDays').value = appState.numDays;
+            document.getElementById('cfgRightCols').value = appState.rightMaxCols;
+            document.getElementById('cfgLeftCols').value = appState.leftMaxCols;
+            draftDrops = JSON.parse(JSON.stringify(appState.drops));
+            renderConfigDropsList();
+            document.getElementById('configModal').classList.remove('hidden');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('configModal').classList.add('hidden');
+        }
+
+        /**
+         * Wire all UI event listeners once DOM is ready
+         */
+        window.addEventListener('DOMContentLoaded', () => {
+            renderLegend();
+            renderTable();
+
+            // Header action buttons
+            document.getElementById('btnOpenConfig').addEventListener('click', openConfigModal);
+            document.getElementById('btnAddDay').addEventListener('click', () => {
+                appState.numDays += 1;
+                saveState();
+                renderTable();
+                showToast(`Added Day ${appState.numDays}`);
+            });
+            document.getElementById('btnPrint').addEventListener('click', () => window.print());
+            document.getElementById('btnResetDemo').addEventListener('click', () => {
+                localStorage.removeItem(STORAGE_KEY);
+                appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+                saveState();
+                renderLegend();
+                renderTable();
+                showToast('Reset to initial schedule');
+            });
+            document.getElementById('btnCloseWarning').addEventListener('click', () => {
+                document.getElementById('spacingWarningBanner').classList.add('hidden');
+            });
+
+            // Cell Edit Modal events
+            document.getElementById('btnCloseCellModal').addEventListener('click', closeCellEditModal);
+            document.getElementById('btnCancelCell').addEventListener('click', closeCellEditModal);
+            document.getElementById('btnSetNow').addEventListener('click', () => {
+                document.getElementById('editTimeInput').value = getCurrentHHMM();
+            });
+            document.getElementById('btnSaveCell').addEventListener('click', () => {
+                if (!activeCellCtx) return;
+                const val = document.getElementById('editTimeInput').value.trim();
+                if (val) {
+                    appState.logs[activeCellCtx.cellKey] = val;
+                    checkDropSpacingWarning(activeCellCtx.dateIso, activeCellCtx.drop.id, activeCellCtx.eyeCode, val);
+                } else {
+                    delete appState.logs[activeCellCtx.cellKey];
+                }
+                saveState();
+                renderTable();
+                closeCellEditModal();
+            });
+            document.getElementById('btnClearCell').addEventListener('click', () => {
+                if (!activeCellCtx) return;
+                delete appState.logs[activeCellCtx.cellKey];
+                saveState();
+                renderTable();
+                closeCellEditModal();
+                showToast('Cleared entry');
+            });
+
+            // Single-day Override Modal events
+            document.getElementById('btnCloseOverrideModal').addEventListener('click', closeDayOverrideModal);
+            document.getElementById('btnSaveOverride').addEventListener('click', () => {
+                if (!activeOverrideCtx) return;
+                const { dateIso, dropId, eyeCode } = activeOverrideCtx;
+                const val = Number(document.getElementById('overrideDosesSelect').value);
+                appState.dayOverrides[`${dateIso}|${dropId}|${eyeCode}`] = val;
+                saveState();
+                renderTable();
+                closeDayOverrideModal();
+            });
+            document.getElementById('btnClearOverride').addEventListener('click', () => {
+                if (!activeOverrideCtx) return;
+                const { dateIso, dropId, eyeCode } = activeOverrideCtx;
+                delete appState.dayOverrides[`${dateIso}|${dropId}|${eyeCode}`];
+                saveState();
+                renderTable();
+                closeDayOverrideModal();
+            });
+            document.getElementById('stopFromThisDateBtn').addEventListener('click', () => {
+                if (!activeOverrideCtx) return;
+                const { dateIso, formattedDate, dropId, eyeCode } = activeOverrideCtx;
+                const drop = appState.drops.find(d => d.id === dropId);
+                if (drop) {
+                    const rules = eyeCode === 'R' ? drop.rightRules : drop.leftRules;
+                    const kept = rules.filter(r => r.fromDate < dateIso);
+                    if (kept.length > 0) {
+                        kept[kept.length - 1].stopDate = dateIso;
+                    } else {
+                        kept.push({ fromDate: dateIso, doses: 0, stopDate: '' });
+                    }
+                    if (eyeCode === 'R') drop.rightRules = kept;
+                    else drop.leftRules = kept;
+
+                    Object.keys(appState.dayOverrides).forEach(k => {
+                        const [dStr, idStr, eStr] = k.split('|');
+                        if (Number(idStr) === dropId && eStr === eyeCode && dStr >= dateIso) {
+                            delete appState.dayOverrides[k];
+                        }
+                    });
+
+                    saveState();
+                    renderLegend();
+                    renderTable();
+                    showToast(`Stopped ${drop.name} (${eyeCode === 'R' ? 'Right' : 'Left'} Eye) from ${formattedDate}`);
+                }
+                closeDayOverrideModal();
+            });
+
+            // Config Modal events
+            document.getElementById('btnCloseConfig').addEventListener('click', closeConfigModal);
+            document.getElementById('btnCancelConfig').addEventListener('click', closeConfigModal);
+            document.getElementById('cfgStartDate').addEventListener('change', () => {
+                syncDraftDropsFromDOM();
+                renderConfigDropsList();
+            });
+            document.getElementById('cfgRightCols').addEventListener('change', () => {
+                syncDraftDropsFromDOM();
+                renderConfigDropsList();
+            });
+            document.getElementById('cfgLeftCols').addEventListener('change', () => {
+                syncDraftDropsFromDOM();
+                renderConfigDropsList();
+            });
+            document.getElementById('btnAddDropType').addEventListener('click', () => {
+                syncDraftDropsFromDOM();
+                const startVal = document.getElementById('cfgStartDate').value || appState.startDate;
+                const nextId = draftDrops.length + 1;
+                const colors = Object.keys(DROP_COLORS);
+                draftDrops.push({
+                    id: nextId,
+                    name: `Eye Drop ${nextId}`,
+                    color: colors[(nextId - 1) % colors.length],
+                    rightRules: [{ fromDate: startVal, doses: 4, stopDate: '' }],
+                    leftRules: [{ fromDate: startVal, doses: 4, stopDate: '' }]
+                });
+                renderConfigDropsList();
+            });
+            document.getElementById('btnSaveConfig').addEventListener('click', () => {
+                syncDraftDropsFromDOM();
+                appState.startDate = document.getElementById('cfgStartDate').value || appState.startDate;
+                appState.numDays = Math.max(1, Math.min(60, Number(document.getElementById('cfgNumDays').value) || 4));
+                appState.rightMaxCols = Math.max(1, Math.min(10, Number(document.getElementById('cfgRightCols').value) || 4));
+                appState.leftMaxCols = Math.max(1, Math.min(10, Number(document.getElementById('cfgLeftCols').value) || 6));
+
+                // Re-index drop IDs cleanly while preserving rules
+                appState.drops = draftDrops.map((d, idx) => ({
+                    ...d,
+                    id: idx + 1,
+                    rightRules: d.rightRules.sort((a, b) => a.fromDate.localeCompare(b.fromDate)),
+                    leftRules: d.leftRules.sort((a, b) => a.fromDate.localeCompare(b.fromDate))
+                }));
+
+                saveState();
+                renderLegend();
+                renderTable();
+                closeConfigModal();
+                showToast('Schedule updated');
+            });
+        });
+    </script>
+</body>
+</html>
